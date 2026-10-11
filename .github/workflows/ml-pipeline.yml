@@ -3,12 +3,6 @@ name: ML pipeline
 on:
   push:
     branches: [main]
-    paths:
-      - "src/**"
-      - "aml/**"
-      - "requirements.txt"
-      - ".github/workflows/ml-pipeline.yml"
-  workflow_dispatch:
 
 env:
   MODEL_NAME: diabetes-regressor
