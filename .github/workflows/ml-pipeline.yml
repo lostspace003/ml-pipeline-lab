@@ -1,4 +1,4 @@
-name: ML pipeline1
+name: ML pipeline2
 
 on:
   push:
