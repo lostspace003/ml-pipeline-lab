@@ -31,7 +31,7 @@ def main() -> None:
 
     data = load_diabetes(as_frame=True)
     X, y = data.data, data.target
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=args.test_size, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=args.test_size, random_state=40)
 
     model = GradientBoostingRegressor(
         n_estimators=args.n_estimators,
