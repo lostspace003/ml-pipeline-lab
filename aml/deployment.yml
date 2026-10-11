@@ -1,0 +1,10 @@
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
+name: blue
+# The workflow passes --endpoint-name from the AML_ENDPOINT_NAME variable; this value is a fallback for manual use.
+endpoint_name: diabetes-ep-change-me
+model: azureml:diabetes-regressor@latest
+# MLflow model: no scoring script or environment needed.
+# Azure ML reserves one extra instance for upgrades, so Standard_DS2_v2 (2 cores) needs 4 cores of quota and
+# fits the default 6-core quota of new subscriptions. If quota is short, try Standard_F2s_v2.
+instance_type: Standard_DS2_v2
+instance_count: 1

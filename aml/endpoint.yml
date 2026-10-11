@@ -1,0 +1,5 @@
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineEndpoint.schema.json
+# The workflow passes --name from the AML_ENDPOINT_NAME variable; this value is a fallback for manual use.
+name: diabetes-ep-change-me
+auth_mode: key
+description: Diabetes progression regressor (lab 2)

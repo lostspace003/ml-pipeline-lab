@@ -1,0 +1,96 @@
+name: ML pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "aml/**"
+      - "requirements.txt"
+      - ".github/workflows/ml-pipeline.yml"
+  workflow_dispatch:
+
+env:
+  MODEL_NAME: diabetes-regressor
+  RESOURCE_GROUP: ${{ vars.AML_RESOURCE_GROUP }}
+  WORKSPACE: ${{ vars.AML_WORKSPACE }}
+  ENDPOINT_NAME: ${{ vars.AML_ENDPOINT_NAME }}
+
+jobs:
+  train-and-register:
+    name: Train and register
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Train
+        run: python src/train.py --output outputs/model
+
+      - name: Upload training outputs
+        uses: actions/upload-artifact@v7
+        with:
+          name: model
+          path: outputs/
+
+      # Service principal secret (this lab). To switch to OIDC later:
+      # add `permissions: id-token: write` to the job and replace `creds:` with
+      # client-id / tenant-id / subscription-id inputs.
+      - name: Azure login
+        uses: azure/login@v3
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install Azure ML CLI extension
+        run: az extension add --name ml --yes
+
+      - name: Register model
+        run: |
+          az ml model create --name "$MODEL_NAME" --type mlflow_model --path outputs/model \
+            --resource-group "$RESOURCE_GROUP" --workspace-name "$WORKSPACE" \
+            --description "Trained by GitHub Actions run ${{ github.run_number }} from ${{ github.sha }}"
+
+  deploy:
+    name: Deploy to managed online endpoint
+    needs: train-and-register
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Azure login
+        uses: azure/login@v3
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install Azure ML CLI extension
+        run: az extension add --name ml --yes
+
+      - name: Create endpoint if it does not exist
+        run: |
+          if ! az ml online-endpoint show --name "$ENDPOINT_NAME" -g "$RESOURCE_GROUP" -w "$WORKSPACE" > /dev/null 2>&1; then
+            az ml online-endpoint create --name "$ENDPOINT_NAME" -f aml/endpoint.yml -g "$RESOURCE_GROUP" -w "$WORKSPACE"
+          else
+            echo "Endpoint $ENDPOINT_NAME already exists"
+          fi
+
+      - name: Create or update the blue deployment
+        run: |
+          if az ml online-deployment show --name blue --endpoint-name "$ENDPOINT_NAME" -g "$RESOURCE_GROUP" -w "$WORKSPACE" > /dev/null 2>&1; then
+            az ml online-deployment update --name blue --endpoint-name "$ENDPOINT_NAME" -f aml/deployment.yml -g "$RESOURCE_GROUP" -w "$WORKSPACE"
+          else
+            az ml online-deployment create --name blue --endpoint-name "$ENDPOINT_NAME" -f aml/deployment.yml -g "$RESOURCE_GROUP" -w "$WORKSPACE"
+          fi
+
+      - name: Route all traffic to blue
+        run: az ml online-endpoint update --name "$ENDPOINT_NAME" --traffic "blue=100" -g "$RESOURCE_GROUP" -w "$WORKSPACE"
+
+      - name: Smoke test
+        run: az ml online-endpoint invoke --name "$ENDPOINT_NAME" --request-file aml/sample-request.json -g "$RESOURCE_GROUP" -w "$WORKSPACE"
